@@ -105,11 +105,10 @@ const putAwayBtn = document.getElementById('putAwayBtn');
 
 const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || /Mobi|Android/i.test(navigator.userAgent);
 
-let gameState = "MENU"; // "MENU", "GAME", "PAUSED", "GAME_OVER"
+let gameState = "MENU"; 
 
 const MAX_LEVELS = 10;
 
-// LocalStorage Persistence
 let highScore = {
     maxLevel: parseInt(localStorage.getItem('banaani_high_level')) || 1,
     totalCuts: parseInt(localStorage.getItem('banaani_total_cuts')) || 0
@@ -141,7 +140,7 @@ let pauseToMenuBtn = { x: 0, y: 0, w: 200, h: 48 };
 let level = 1;
 let cutsCount = 0;
 let totalRunCuts = 0; 
-let targetCuts = 50; // Dynamic target cuts per level
+let targetCuts = 50;
 let timeLeft = 60;
 let timerInterval = null;
 let isVictory = false;
@@ -176,7 +175,7 @@ let mousePos = { x: 0, y: 0 };
 let scale = 1;
 
 function getTargetCutsForLevel(lvl) {
-    return 50 + (lvl - 1) * 25; // Base 50 + 25 per level
+    return 50 + (lvl - 1) * 25;
 }
 
 function setupResolution() {
@@ -444,6 +443,7 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
+// FIXED helper function (correct vertex rendering)
 function drawRoundedRect(x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -474,7 +474,7 @@ function resetLevelData() {
     currentCut = null;
     juiceDrips = [];
     targetCuts = getTargetCutsForLevel(level);
-    timeLeft = 25 + level * 35; // Generous timer based on cut count
+    timeLeft = 25 + level * 35;
     knife.isHeld = false;
     knife.x = canvas.width - 120;
     knife.y = canvas.height - 180;
@@ -679,7 +679,6 @@ function renderMenu() {
 
     drawBanana(canvas.width / 2, 310, skin);
 
-    // Record Display
     ctx.fillStyle = '#2ecc71';
     ctx.font = isMobile ? '14px Arial' : '16px Arial';
     ctx.fillText(`🏆 Rekord Tase: ${highScore.maxLevel} / ${MAX_LEVELS} | Kokku lõikeid: ${highScore.totalCuts}`, canvas.width / 2, canvas.height - 130);
