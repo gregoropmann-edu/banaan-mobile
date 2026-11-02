@@ -41,7 +41,6 @@
             background-color: #1e1e28;
             touch-action: none;
         }
-        /* Top HUD Control Buttons */
         .hud-controls {
             position: absolute;
             top: 10px;
@@ -103,14 +102,11 @@ const fullscreenBtn = document.getElementById('fullscreenBtn');
 const pauseBtn = document.getElementById('pauseBtn');
 const menuBtn = document.getElementById('menuBtn');
 const putAwayBtn = document.getElementById('putAwayBtn');
-const topControls = document.getElementById('topControls');
 
-// Mobile detection
 const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || /Mobi|Android/i.test(navigator.userAgent);
 
-let gameState = "MENU"; // "MENU", "GAME", "PAUSED", "GAME_OVER"
+let gameState = "MENU"; 
 
-// Skins
 const BANANA_SKINS = [
     { name: "Kollane (Klassikaline)", color: "#ffe135", type: "classic" },
     { name: "Roheline (Toores)", color: "#7ccd32", type: "classic" },
@@ -120,13 +116,11 @@ const BANANA_SKINS = [
 ];
 let selectedSkinIndex = 0;
 
-// Arrow & Pause Button Interactive Rectangles
-let leftArrowBtn = { x: 0, y: 0, w: 50, h: 40 };
-let rightArrowBtn = { x: 0, y: 0, w: 50, h: 40 };
+let leftArrowBtn = { x: 0, y: 0, w: 44, h: 36 };
+let rightArrowBtn = { x: 0, y: 0, w: 44, h: 36 };
 let resumeBtn = { x: 0, y: 0, w: 200, h: 48 };
 let pauseToMenuBtn = { x: 0, y: 0, w: 200, h: 48 };
 
-// Game Parameters
 let level = 1;
 let cutsCount = 0;
 const TARGET_CUTS = 50;
@@ -160,18 +154,14 @@ let scale = 1;
 
 function setupResolution() {
     if (isMobile) {
-        // Mobile layout aspect (360x640)
         canvas.width = 360;
         canvas.height = 640;
-        
         const availW = window.innerWidth - 16;
         const availH = window.innerHeight - 16;
         scale = Math.min(availW / 360, availH / 640);
     } else {
-        // Original desktop resolution (800x600)
         canvas.width = 800;
         canvas.height = 600;
-
         const availW = window.innerWidth - 40;
         const availH = window.innerHeight - 40;
         scale = Math.min(1, Math.min(availW / 800, availH / 600));
@@ -181,10 +171,6 @@ function setupResolution() {
     gameContainer.style.height = `${canvas.height * scale}px`;
     canvas.style.width = `${canvas.width * scale}px`;
     canvas.style.height = `${canvas.height * scale}px`;
-
-    // Recalculate arrow bounds
-    leftArrowBtn = { x: canvas.width / 2 - 190, y: 155, w: 50, h: 40 };
-    rightArrowBtn = { x: canvas.width / 2 + 140, y: 155, w: 50, h: 40 };
 
     resumeBtn = { x: canvas.width / 2 - 100, y: canvas.height / 2 - 35, w: 200, h: 48 };
     pauseToMenuBtn = { x: canvas.width / 2 - 100, y: canvas.height / 2 + 25, w: 200, h: 48 };
@@ -295,7 +281,6 @@ function resetKnife() {
     updateUIElements();
 }
 
-// Mouse Listeners
 canvas.addEventListener('mousemove', (e) => {
     updateMousePos(getCanvasCoordinates(e));
 });
@@ -322,7 +307,6 @@ canvas.addEventListener('contextmenu', (e) => {
     }
 });
 
-// Touch Listeners
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     const coords = getCanvasCoordinates(e);
@@ -341,7 +325,6 @@ canvas.addEventListener('touchend', (e) => {
     handleInputEnd();
 }, { passive: false });
 
-// Control Buttons
 fullscreenBtn.addEventListener('click', () => {
     if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(() => {});
@@ -436,7 +419,7 @@ function drawRoundedRect(x, y, w, h, r) {
     ctx.quadraticCurveTo(x + w, y, x + w, y + r);
     ctx.lineTo(x + w, y + h - r);
     ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
+    ctx.lineTo(x + r, y);
     ctx.quadraticCurveTo(x, y + h, x, y + h - r);
     ctx.lineTo(x, y + r);
     ctx.quadraticCurveTo(x, y, x + r, y);
@@ -606,31 +589,52 @@ function renderMenu() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.fillStyle = '#ffe135';
-    ctx.font = isMobile ? 'bold 30px Arial' : 'bold 46px Arial';
+    ctx.font = isMobile ? 'bold 28px Arial' : 'bold 44px Arial';
     ctx.textAlign = 'center';
     ctx.fillText("BANAANI SIMULAATOR", canvas.width / 2, 90);
 
     const skin = BANANA_SKINS[selectedSkinIndex];
-    ctx.font = isMobile ? '16px Arial' : '22px Arial';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(`Skinn: ${skin.name}`, canvas.width / 2, 180);
+    const skinText = `Skinn: ${skin.name}`;
+    ctx.font = isMobile ? '16px Arial' : '20px Arial';
+    
+    // Dynamic Arrow Positioning based on exact text width
+    const textWidth = ctx.measureText(skinText).width;
+    const padding = 20;
+    
+    leftArrowBtn.w = 44;
+    leftArrowBtn.h = 36;
+    leftArrowBtn.y = 155;
+    leftArrowBtn.x = (canvas.width / 2) - (textWidth / 2) - leftArrowBtn.w - padding;
 
-    // Arrow Buttons
+    rightArrowBtn.w = 44;
+    rightArrowBtn.h = 36;
+    rightArrowBtn.y = 155;
+    rightArrowBtn.x = (canvas.width / 2) + (textWidth / 2) + padding;
+
+    // Draw skin text label
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(skinText, canvas.width / 2, 180);
+
+    // Render Left Arrow Box
     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
-
-    drawRoundedRect(leftArrowBtn.x, leftArrowBtn.y, leftArrowBtn.w, leftArrowBtn.h, 8);
-    ctx.fill(); ctx.stroke();
+    drawRoundedRect(leftArrowBtn.x, leftArrowBtn.y, leftArrowBtn.w, leftArrowBtn.h, 6);
+    ctx.fill(); 
+    ctx.stroke();
+    
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px Arial';
-    ctx.fillText("◀", leftArrowBtn.x + 25, leftArrowBtn.y + 27);
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText("◀", leftArrowBtn.x + (leftArrowBtn.w / 2), leftArrowBtn.y + 24);
 
+    // Render Right Arrow Box
     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-    drawRoundedRect(rightArrowBtn.x, rightArrowBtn.y, rightArrowBtn.w, rightArrowBtn.h, 8);
-    ctx.fill(); ctx.stroke();
+    drawRoundedRect(rightArrowBtn.x, rightArrowBtn.y, rightArrowBtn.w, rightArrowBtn.h, 6);
+    ctx.fill(); 
+    ctx.stroke();
+    
     ctx.fillStyle = '#ffffff';
-    ctx.fillText("▶", rightArrowBtn.x + 25, rightArrowBtn.y + 27);
+    ctx.fillText("▶", rightArrowBtn.x + (rightArrowBtn.w / 2), rightArrowBtn.y + 24);
 
     drawBanana(canvas.width / 2, 330, skin);
 
