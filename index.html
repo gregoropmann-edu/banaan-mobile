@@ -43,7 +43,7 @@
         /* Mobile Overlay Controls */
         .ui-btn {
             position: absolute;
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.65);
             color: #ffffff;
             border: 1px solid rgba(255, 255, 255, 0.3);
             border-radius: 8px;
@@ -57,21 +57,20 @@
         .ui-btn:active {
             background: rgba(255, 255, 255, 0.3);
         }
-        #fullscreenBtn {
+        #topRightControls {
+            position: absolute;
             top: 10px;
             right: 10px;
+            display: flex;
+            gap: 8px;
+            z-index: 10;
         }
         #putAwayBtn {
+            position: absolute;
             bottom: 10px;
             right: 10px;
             display: none;
             background: rgba(231, 76, 60, 0.7);
-        }
-        #menuControls {
-            position: absolute;
-            bottom: 20px;
-            display: none;
-            gap: 15px;
             z-index: 10;
         }
     </style>
@@ -79,13 +78,13 @@
 <body>
 
 <div id="gameContainer">
-    <button id="fullscreenBtn" class="ui-btn"> Täisekraan</button>
-    <button id="putAwayBtn" class="ui-btn">Pane nuga ära</button>
-    
-    <div id="menuControls">
-        <button id="prevSkinBtn" class="ui-btn">Eelmine skin</button>
-        <button id="nextSkinBtn" class="ui-btn">Järgmine skin</button>
+    <div id="topRightControls">
+        <button id="pauseBtn" class="ui-btn">⏸️ Paus</button>
+        <button id="menuBtn" class="ui-btn">🏠 Menüü</button>
+        <button id="fullscreenBtn" class="ui-btn">⛶ Täisekraan</button>
     </div>
+
+    <button id="putAwayBtn" class="ui-btn">Pane nuga ära</button>
 
     <canvas id="gameCanvas" width="800" height="600"></canvas>
 </div>
@@ -95,15 +94,14 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 const fullscreenBtn = document.getElementById('fullscreenBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const menuBtn = document.getElementById('menuBtn');
 const putAwayBtn = document.getElementById('putAwayBtn');
-const menuControls = document.getElementById('menuControls');
-const prevSkinBtn = document.getElementById('prevSkinBtn');
-const nextSkinBtn = document.getElementById('nextSkinBtn');
 
 // Dynamic Device Detection
 const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || /Mobi|Android/i.test(navigator.userAgent);
 
-let gameState = "MENU"; // "MENU", "GAME", "GAME_OVER"
+let gameState = "MENU"; // "MENU", "GAME", "PAUSED", "GAME_OVER"
 
 // Skins
 const BANANA_SKINS = [
@@ -114,6 +112,14 @@ const BANANA_SKINS = [
     { name: "Roosa (Rave)", color: "#ff69b4", type: "classic" }
 ];
 let selectedSkinIndex = 0;
+
+// Arrow button bounds in Menu UI
+const leftArrowBtn = { x: 140, y: 155, w: 50, h: 40 };
+const rightArrowBtn = { x: 610, y: 155, w: 50, h: 40 };
+
+// Pause Screen Button Bounds
+const resumeBtn = { x: 300, y: 260, w: 200, h: 50 };
+const pauseToMenuBtn = { x: 300, y: 330, w: 200, h: 50 };
 
 // Game Parameters
 let level = 1;
@@ -147,7 +153,7 @@ let knife = {
 let mousePos = { x: 0, y: 0 };
 let scale = 1;
 
-// Resizing logic for resolution and scaling
+// Resizing logic for screen scaling
 function resizeCanvas() {
     const containerWidth = window.innerWidth;
     const containerHeight = window.innerHeight;
@@ -173,11 +179,16 @@ function getCanvasCoordinates(e) {
     };
 }
 
+function isInside(pos, rect) {
+    return pos.x >= rect.x && pos.x <= rect.x + rect.w &&
+           pos.y >= rect.y && pos.y <= rect.y + rect.h;
+}
+
 function updateMousePos(coords) {
     mousePos.x = coords.x;
     mousePos.y = coords.y;
 
-    if (knife.isHeld) {
+    if (gameState === "GAME" && knife.isHeld) {
         knife.x = mousePos.x - 20;
         knife.y = mousePos.y - 10;
 
@@ -203,10 +214,16 @@ function updateMousePos(coords) {
 
 function handleInputStart(coords) {
     if (gameState === "MENU") {
-        startGame();
+        // Skin selector arrow clicks
+        if (isInside(coords, leftArrowBtn)) {
+            selectedSkinIndex = (selectedSkinIndex - 1 + BANANA_SKINS.length) % BANANA_SKINS.length;
+        } else if (isInside(coords, rightArrowBtn)) {
+            selectedSkinIndex = (selectedSkinIndex + 1) % BANANA_SKINS.length;
+        } else {
+            startGame();
+        }
     } else if (gameState === "GAME") {
         if (!knife.isHeld) {
-            // Auto-equip on mobile tap or tap directly on knife on desktop
             if (isMobile || (mousePos.x >= knife.x - 40 && mousePos.x <= knife.x + knife.width + 20 &&
                 mousePos.y >= knife.y - 40 && mousePos.y <= knife.y + knife.height + 20)) {
                 knife.isHeld = true;
@@ -215,9 +232,14 @@ function handleInputStart(coords) {
             isCutting = true;
             currentCut = { points: [{ x: coords.x, y: coords.y }] };
         }
+    } else if (gameState === "PAUSED") {
+        if (isInside(coords, resumeBtn)) {
+            resumeGame();
+        } else if (isInside(coords, pauseToMenuBtn)) {
+            goToMenu();
+        }
     } else if (gameState === "GAME_OVER") {
-        gameState = "MENU";
-        updateUIElements();
+        goToMenu();
     }
 }
 
@@ -267,7 +289,7 @@ window.addEventListener('mouseup', (e) => {
 
 canvas.addEventListener('contextmenu', (e) => {
     e.preventDefault();
-    if (knife.isHeld) {
+    if (gameState === "GAME" && knife.isHeld) {
         resetKnife();
     }
 });
@@ -291,7 +313,7 @@ canvas.addEventListener('touchend', (e) => {
     handleInputEnd();
 }, { passive: false });
 
-// Mobile Button Controls
+// Mobile & UI Control Buttons
 fullscreenBtn.addEventListener('click', () => {
     if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(() => {});
@@ -300,27 +322,57 @@ fullscreenBtn.addEventListener('click', () => {
     }
 });
 
+pauseBtn.addEventListener('click', () => {
+    if (gameState === "GAME") {
+        pauseGame();
+    } else if (gameState === "PAUSED") {
+        resumeGame();
+    }
+});
+
+menuBtn.addEventListener('click', () => {
+    goToMenu();
+});
+
 putAwayBtn.addEventListener('click', () => {
     resetKnife();
 });
 
-prevSkinBtn.addEventListener('click', () => {
-    selectedSkinIndex = (selectedSkinIndex - 1 + BANANA_SKINS.length) % BANANA_SKINS.length;
-});
+function pauseGame() {
+    gameState = "PAUSED";
+    stopTimer();
+    updateUIElements();
+}
 
-nextSkinBtn.addEventListener('click', () => {
-    selectedSkinIndex = (selectedSkinIndex + 1) % BANANA_SKINS.length;
-});
+function resumeGame() {
+    gameState = "GAME";
+    startTimer();
+    updateUIElements();
+}
+
+function goToMenu() {
+    stopTimer();
+    gameState = "MENU";
+    resetLevelData();
+    updateUIElements();
+}
 
 function updateUIElements() {
     if (gameState === "MENU") {
-        menuControls.style.display = isMobile ? "flex" : "none";
+        pauseBtn.style.display = "none";
+        menuBtn.style.display = "none";
         putAwayBtn.style.display = "none";
     } else if (gameState === "GAME") {
-        menuControls.style.display = "none";
+        pauseBtn.style.display = "block";
+        menuBtn.style.display = "block";
         putAwayBtn.style.display = (knife.isHeld && isMobile) ? "block" : "none";
+    } else if (gameState === "PAUSED") {
+        pauseBtn.style.display = "block";
+        menuBtn.style.display = "block";
+        putAwayBtn.style.display = "none";
     } else {
-        menuControls.style.display = "none";
+        pauseBtn.style.display = "none";
+        menuBtn.style.display = "none";
         putAwayBtn.style.display = "none";
     }
 }
@@ -335,14 +387,16 @@ window.addEventListener('keydown', (e) => {
             startGame();
         }
     } else if (gameState === "GAME") {
-        if (e.key === "Escape") {
-            stopTimer();
-            gameState = "MENU";
-            updateUIElements();
+        if (e.key === "Escape" || e.key === "p" || e.key === "P") {
+            pauseGame();
         } else if (e.key === "c" || e.key === "C") {
             cuts = [];
             juiceDrips = [];
             cutsCount = 0;
+        }
+    } else if (gameState === "PAUSED") {
+        if (e.key === "Escape" || e.key === "p" || e.key === "P") {
+            resumeGame();
         }
     }
 });
@@ -531,19 +585,33 @@ function renderMenu() {
     const skin = BANANA_SKINS[selectedSkinIndex];
     ctx.font = '22px Arial';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(`< Skinn: ${skin.name} >`, canvas.width / 2, 180);
+    ctx.fillText(`Skinn: ${skin.name}`, canvas.width / 2, 182);
+
+    // Arrow Buttons for Skin Selection
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+
+    // Left Arrow
+    drawRoundedRect(leftArrowBtn.x, leftArrowBtn.y, leftArrowBtn.w, leftArrowBtn.h, 8);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 22px Arial';
+    ctx.fillText("◀", leftArrowBtn.x + 25, leftArrowBtn.y + 27);
+
+    // Right Arrow
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    drawRoundedRect(rightArrowBtn.x, rightArrowBtn.y, rightArrowBtn.w, rightArrowBtn.h, 8);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText("▶", rightArrowBtn.x + 25, rightArrowBtn.y + 27);
 
     drawBanana(canvas.width / 2, 330, skin);
 
     ctx.font = '16px Arial';
     ctx.fillStyle = '#aaaa88';
-    if (isMobile) {
-        ctx.fillText("Kasuta nuppe skini muutmiseks", canvas.width / 2, 490);
-        ctx.fillText("Puuduta ekraani alustamiseks", canvas.width / 2, 520);
-    } else {
-        ctx.fillText("Kasuta nooli [<- / ->] skini muutmiseks", canvas.width / 2, 490);
-        ctx.fillText("Vajuta [ENTER] või tee HIIRKLÕPS alustamiseks", canvas.width / 2, 520);
-    }
+    ctx.fillText("Kasuta noole-nuppe või klaviatuuri skini muutmiseks", canvas.width / 2, 490);
+    ctx.fillText(isMobile ? "Puuduta ekraani alustamiseks" : "Vajuta [ENTER] või tee HIIRKLÕPS alustamiseks", canvas.width / 2, 520);
 }
 
 function renderGame() {
@@ -593,13 +661,13 @@ function renderGame() {
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 20px Arial';
     ctx.textAlign = 'left';
-    ctx.fillText(`Tase: ${level} (${boardStyle.name})`, 20, 38);
+    ctx.fillText(`Tase: ${level}`, 20, 38);
 
     ctx.fillStyle = cutsCount >= TARGET_CUTS ? '#2ecc71' : '#ffcc00';
-    ctx.fillText(`Kriimustusi: ${cutsCount} / ${TARGET_CUTS}`, 300, 38);
+    ctx.fillText(`Kriimustusi: ${cutsCount} / ${TARGET_CUTS}`, 200, 38);
 
     ctx.fillStyle = timeLeft <= 10 ? '#e74c3c' : '#ffffff';
-    ctx.fillText(`Aeg: ${timeLeft}s`, 660, 38);
+    ctx.fillText(`Aeg: ${timeLeft}s`, 430, 38);
 
     if (!knife.isHeld) {
         ctx.fillStyle = '#ffffff';
@@ -613,6 +681,38 @@ function renderGame() {
         const helpText = isMobile ? "Lohista noaga lõikamiseks | Pane nuga ära nupust" : "1 tõmme = 1 kriimustus | Paremklõps paneb noa ära";
         ctx.fillText(helpText, canvas.width / 2, 560);
     }
+}
+
+function renderPaused() {
+    renderGame(); // Draw game in background
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#ffe135';
+    ctx.font = 'bold 44px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText("PAUS", canvas.width / 2, 190);
+
+    ctx.lineWidth = 2;
+
+    // Resume button
+    ctx.fillStyle = 'rgba(46, 204, 113, 0.8)';
+    ctx.strokeStyle = '#27ae60';
+    drawRoundedRect(resumeBtn.x, resumeBtn.y, resumeBtn.w, resumeBtn.h, 10);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText("Jätka mängu", canvas.width / 2, resumeBtn.y + 32);
+
+    // Main Menu button
+    ctx.fillStyle = 'rgba(231, 76, 60, 0.8)';
+    ctx.strokeStyle = '#c0392b';
+    drawRoundedRect(pauseToMenuBtn.x, pauseToMenuBtn.y, pauseToMenuBtn.w, pauseToMenuBtn.h, 10);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText("Tagasi menüüsse", canvas.width / 2, pauseToMenuBtn.y + 32);
 }
 
 function renderGameOver() {
@@ -639,6 +739,8 @@ function gameLoop() {
         renderMenu();
     } else if (gameState === "GAME") {
         renderGame();
+    } else if (gameState === "PAUSED") {
+        renderPaused();
     } else if (gameState === "GAME_OVER") {
         renderGameOver();
     }
