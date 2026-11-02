@@ -30,8 +30,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
+            padding: 10px;
         }
         canvas {
             display: block;
@@ -40,15 +41,14 @@
             border-radius: 12px;
             touch-action: none;
         }
-        /* Mobile Overlay Controls */
         .ui-btn {
             position: absolute;
-            background: rgba(0, 0, 0, 0.65);
+            background: rgba(0, 0, 0, 0.75);
             color: #ffffff;
             border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 8px;
-            padding: 8px 14px;
-            font-size: 14px;
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 12px;
             font-weight: bold;
             cursor: pointer;
             z-index: 10;
@@ -59,18 +59,14 @@
         }
         #topRightControls {
             position: absolute;
-            top: 10px;
-            right: 10px;
             display: flex;
-            gap: 8px;
+            gap: 6px;
             z-index: 10;
         }
         #putAwayBtn {
             position: absolute;
-            bottom: 10px;
-            right: 10px;
             display: none;
-            background: rgba(231, 76, 60, 0.7);
+            background: rgba(231, 76, 60, 0.85);
             z-index: 10;
         }
     </style>
@@ -81,12 +77,12 @@
     <div id="topRightControls">
         <button id="pauseBtn" class="ui-btn">⏸️ Paus</button>
         <button id="menuBtn" class="ui-btn">🏠 Menüü</button>
-        <button id="fullscreenBtn" class="ui-btn">⛶ Täisekraan</button>
+        <button id="fullscreenBtn" class="ui-btn">⛶</button>
     </div>
 
     <button id="putAwayBtn" class="ui-btn">Pane nuga ära</button>
 
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <canvas id="gameCanvas"></canvas>
 </div>
 
 <script>
@@ -97,6 +93,7 @@ const fullscreenBtn = document.getElementById('fullscreenBtn');
 const pauseBtn = document.getElementById('pauseBtn');
 const menuBtn = document.getElementById('menuBtn');
 const putAwayBtn = document.getElementById('putAwayBtn');
+const topRightControls = document.getElementById('topRightControls');
 
 // Dynamic Device Detection
 const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || /Mobi|Android/i.test(navigator.userAgent);
@@ -113,13 +110,11 @@ const BANANA_SKINS = [
 ];
 let selectedSkinIndex = 0;
 
-// Arrow button bounds in Menu UI
-const leftArrowBtn = { x: 140, y: 155, w: 50, h: 40 };
-const rightArrowBtn = { x: 610, y: 155, w: 50, h: 40 };
-
-// Pause Screen Button Bounds
-const resumeBtn = { x: 300, y: 260, w: 200, h: 50 };
-const pauseToMenuBtn = { x: 300, y: 330, w: 200, h: 50 };
+// Dynamic Arrow & Pause UI bounds
+let leftArrowBtn = { x: 0, y: 0, w: 44, h: 36 };
+let rightArrowBtn = { x: 0, y: 0, w: 44, h: 36 };
+let resumeBtn = { x: 0, y: 0, w: 180, h: 44 };
+let pauseToMenuBtn = { x: 0, y: 0, w: 180, h: 44 };
 
 // Game Parameters
 let level = 1;
@@ -143,30 +138,56 @@ let juiceDrips = [];
 let isCutting = false;
 
 let knife = {
-    x: 680,
-    y: 420,
-    width: 90,
-    height: 35,
+    x: 0,
+    y: 0,
+    width: 70,
+    height: 30,
     isHeld: false
 };
 
 let mousePos = { x: 0, y: 0 };
 let scale = 1;
 
-// Resizing logic for screen scaling
-function resizeCanvas() {
-    const containerWidth = window.innerWidth;
-    const containerHeight = window.innerHeight;
-    const baseWidth = 800;
-    const baseHeight = 600;
+function fitCanvas() {
+    const baseW = isMobile ? 360 : 640;
+    const baseH = isMobile ? 640 : 480;
 
-    scale = Math.min(containerWidth / baseWidth, containerHeight / baseHeight);
+    canvas.width = baseW;
+    canvas.height = baseH;
 
-    canvas.style.width = `${baseWidth * scale}px`;
-    canvas.style.height = `${baseHeight * scale}px`;
+    const availableW = window.innerWidth - 20;
+    const availableH = window.innerHeight - 20;
+
+    scale = Math.min(availableW / baseW, availableH / baseH);
+
+    const cssW = baseW * scale;
+    const cssH = baseH * scale;
+
+    canvas.style.width = `${cssW}px`;
+    canvas.style.height = `${cssH}px`;
+
+    // Position HTML overlay controls precisely over canvas
+    const rect = canvas.getBoundingClientRect();
+    
+    topRightControls.style.top = `${rect.top + 8}px`;
+    topRightControls.style.right = `${window.innerWidth - rect.right + 8}px`;
+
+    putAwayBtn.style.bottom = `${window.innerHeight - rect.bottom + 12}px`;
+    putAwayBtn.style.right = `${window.innerWidth - rect.right + 12}px`;
+
+    // Recalculate canvas interactive bounds
+    leftArrowBtn = { x: 20, y: 130, w: 44, h: 36 };
+    rightArrowBtn = { x: baseW - 64, y: 130, w: 44, h: 36 };
+
+    resumeBtn = { x: baseW / 2 - 90, y: baseH / 2 - 30, w: 180, h: 44 };
+    pauseToMenuBtn = { x: baseW / 2 - 90, y: baseH / 2 + 25, w: 180, h: 44 };
+
+    if (!knife.isHeld) {
+        knife.x = baseW * 0.82;
+        knife.y = baseH * 0.72;
+    }
 }
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
+window.addEventListener('resize', fitCanvas);
 
 function getCanvasCoordinates(e) {
     const rect = canvas.getBoundingClientRect();
@@ -189,22 +210,22 @@ function updateMousePos(coords) {
     mousePos.y = coords.y;
 
     if (gameState === "GAME" && knife.isHeld) {
-        knife.x = mousePos.x - 20;
-        knife.y = mousePos.y - 10;
+        knife.x = mousePos.x - 15;
+        knife.y = mousePos.y - 8;
 
         if (isCutting && currentCut) {
             const lastPt = currentCut.points[currentCut.points.length - 1];
             const dist = Math.hypot(mousePos.x - lastPt.x, mousePos.y - lastPt.y);
             
-            if (dist > 5) {
+            if (dist > 4) {
                 currentCut.points.push({ x: mousePos.x, y: mousePos.y });
 
                 for (let i = 0; i < 2; i++) {
                     juiceDrips.push({
-                        x: mousePos.x + (Math.random() * 10 - 5),
-                        y: mousePos.y + (Math.random() * 10 - 5),
-                        radius: Math.random() * 4 + 2,
-                        speedY: Math.random() * 1.5 + 0.5
+                        x: mousePos.x + (Math.random() * 8 - 4),
+                        y: mousePos.y + (Math.random() * 8 - 4),
+                        radius: Math.random() * 3 + 1.5,
+                        speedY: Math.random() * 1.2 + 0.4
                     });
                 }
             }
@@ -214,7 +235,6 @@ function updateMousePos(coords) {
 
 function handleInputStart(coords) {
     if (gameState === "MENU") {
-        // Skin selector arrow clicks
         if (isInside(coords, leftArrowBtn)) {
             selectedSkinIndex = (selectedSkinIndex - 1 + BANANA_SKINS.length) % BANANA_SKINS.length;
         } else if (isInside(coords, rightArrowBtn)) {
@@ -224,8 +244,8 @@ function handleInputStart(coords) {
         }
     } else if (gameState === "GAME") {
         if (!knife.isHeld) {
-            if (isMobile || (mousePos.x >= knife.x - 40 && mousePos.x <= knife.x + knife.width + 20 &&
-                mousePos.y >= knife.y - 40 && mousePos.y <= knife.y + knife.height + 20)) {
+            if (isMobile || (mousePos.x >= knife.x - 30 && mousePos.x <= knife.x + knife.width + 15 &&
+                mousePos.y >= knife.y - 30 && mousePos.y <= knife.y + knife.height + 15)) {
                 knife.isHeld = true;
             }
         } else {
@@ -262,8 +282,8 @@ function resetKnife() {
     knife.isHeld = false;
     isCutting = false;
     currentCut = null;
-    knife.x = 680;
-    knife.y = 420;
+    knife.x = canvas.width * 0.82;
+    knife.y = canvas.height * 0.72;
     updateUIElements();
 }
 
@@ -313,7 +333,7 @@ canvas.addEventListener('touchend', (e) => {
     handleInputEnd();
 }, { passive: false });
 
-// Mobile & UI Control Buttons
+// Mobile & UI Buttons
 fullscreenBtn.addEventListener('click', () => {
     if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(() => {});
@@ -430,8 +450,8 @@ function resetLevelData() {
     juiceDrips = [];
     timeLeft = Math.max(20, 60 - (level - 1) * 5);
     knife.isHeld = false;
-    knife.x = 680;
-    knife.y = 420;
+    knife.x = canvas.width * 0.82;
+    knife.y = canvas.height * 0.72;
     isCutting = false;
 }
 
@@ -463,8 +483,10 @@ function getBoardColor(lvl) {
     return BOARD_COLORS[idx];
 }
 
-function drawBanana(cx, cy, skin) {
+function drawBanana(cx, cy, skin, scaleFactor = 1) {
     ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scaleFactor, scaleFactor);
 
     if (skin.type === "hand") {
         ctx.fillStyle = skin.color;
@@ -473,55 +495,42 @@ function drawBanana(cx, cy, skin) {
         ctx.lineJoin = "round";
 
         ctx.beginPath();
-        ctx.moveTo(cx - 140, cy + 60);
-        ctx.bezierCurveTo(cx - 60, cy + 90, cx + 20, cy + 60, cx + 80, cy + 20);
-
-        ctx.lineTo(cx + 105, cy + 30);
-        ctx.lineTo(cx + 120, cy + 15);
-        ctx.lineTo(cx + 110, cy + 0);
-
-        ctx.lineTo(cx + 130, cy - 10);
-        ctx.lineTo(cx + 120, cy - 25);
-
-        ctx.lineTo(cx + 135, cy - 40);
-        ctx.lineTo(cx + 120, cy - 50);
-
-        ctx.lineTo(cx + 110, cy - 55);
-        ctx.lineTo(cx + 95, cy - 40);
-
-        ctx.lineTo(cx + 75, cy - 45);
-        ctx.lineTo(cx + 60, cy - 25);
-
-        ctx.bezierCurveTo(cx + 10, cy - 10, cx - 50, cy + 10, cx - 120, cy + 10);
+        ctx.moveTo(-110, 45);
+        ctx.bezierCurveTo(-50, 70, 15, 45, 60, 15);
+        ctx.lineTo(80, 22);
+        ctx.lineTo(95, 10);
+        ctx.lineTo(85, 0);
+        ctx.lineTo(100, -8);
+        ctx.lineTo(90, -20);
+        ctx.lineTo(102, -32);
+        ctx.lineTo(90, -40);
+        ctx.lineTo(82, -44);
+        ctx.lineTo(72, -32);
+        ctx.lineTo(58, -36);
+        ctx.lineTo(46, -20);
+        ctx.bezierCurveTo(8, -8, -40, 8, -95, 8);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
 
-        ctx.strokeStyle = "rgba(180, 100, 50, 0.25)";
-        ctx.lineWidth = 5;
-        ctx.beginPath();
-        ctx.moveTo(cx - 110, cy + 35);
-        ctx.bezierCurveTo(cx - 40, cy + 45, cx + 30, cy + 25, cx + 70, cy - 5);
-        ctx.stroke();
-
     } else {
         ctx.beginPath();
-        ctx.arc(cx, cy - 20, 115, 0.2 * Math.PI, 0.8 * Math.PI, false);
-        ctx.lineWidth = 48;
+        ctx.arc(0, -15, 90, 0.2 * Math.PI, 0.8 * Math.PI, false);
+        ctx.lineWidth = 38;
         ctx.strokeStyle = skin.color;
         ctx.lineCap = 'round';
         ctx.stroke();
 
         ctx.beginPath();
-        ctx.arc(cx, cy - 20, 115, 0.22 * Math.PI, 0.78 * Math.PI, false);
-        ctx.lineWidth = 10;
+        ctx.arc(0, -15, 90, 0.22 * Math.PI, 0.78 * Math.PI, false);
+        ctx.lineWidth = 8;
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
         ctx.stroke();
 
         ctx.fillStyle = '#4a2e13';
         ctx.beginPath();
-        ctx.arc(cx - 100, cy + 50, 9, 0, Math.PI * 2);
-        ctx.arc(cx + 100, cy + 50, 9, 0, Math.PI * 2);
+        ctx.arc(-80, 40, 7, 0, Math.PI * 2);
+        ctx.arc(80, 40, 7, 0, Math.PI * 2);
         ctx.fill();
     }
 
@@ -537,28 +546,22 @@ function drawKnifeObj(k) {
     
     ctx.beginPath();
     ctx.moveTo(k.x, k.y);
-    ctx.lineTo(k.x + 60, k.y - 18);
-    ctx.lineTo(k.x + 50, k.y + 10);
+    ctx.lineTo(k.x + 45, k.y - 14);
+    ctx.lineTo(k.x + 38, k.y + 8);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.moveTo(k.x + 5, k.y - 2);
-    ctx.lineTo(k.x + 55, k.y - 16);
-    ctx.lineTo(k.x + 45, k.y + 5);
+    ctx.moveTo(k.x + 4, k.y - 2);
+    ctx.lineTo(k.x + 40, k.y - 12);
+    ctx.lineTo(k.x + 34, k.y + 4);
     ctx.closePath();
     ctx.fill();
 
     ctx.fillStyle = '#2c3e50';
-    ctx.fillRect(k.x - 30, k.y - 8, 32, 14);
-
-    ctx.fillStyle = '#f39c12';
-    ctx.beginPath();
-    ctx.arc(k.x - 20, k.y, 2, 0, Math.PI * 2);
-    ctx.arc(k.x - 8, k.y, 2, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(k.x - 22, k.y - 6, 24, 11);
 
     ctx.restore();
 }
@@ -578,40 +581,38 @@ function renderMenu() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.fillStyle = '#ffe135';
-    ctx.font = 'bold 46px Arial';
+    ctx.font = isMobile ? 'bold 26px Arial' : 'bold 36px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText("BANAANI SIMULAATOR", canvas.width / 2, 90);
+    ctx.fillText("BANAANI SIMULAATOR", canvas.width / 2, 60);
 
     const skin = BANANA_SKINS[selectedSkinIndex];
-    ctx.font = '22px Arial';
+    ctx.font = isMobile ? '15px Arial' : '18px Arial';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(`Skinn: ${skin.name}`, canvas.width / 2, 182);
+    ctx.fillText(`Skinn: ${skin.name}`, canvas.width / 2, 152);
 
-    // Arrow Buttons for Skin Selection
+    // Arrow Buttons
     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
 
-    // Left Arrow
-    drawRoundedRect(leftArrowBtn.x, leftArrowBtn.y, leftArrowBtn.w, leftArrowBtn.h, 8);
+    drawRoundedRect(leftArrowBtn.x, leftArrowBtn.y, leftArrowBtn.w, leftArrowBtn.h, 6);
     ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px Arial';
-    ctx.fillText("◀", leftArrowBtn.x + 25, leftArrowBtn.y + 27);
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText("◀", leftArrowBtn.x + leftArrowBtn.w / 2, leftArrowBtn.y + 24);
 
-    // Right Arrow
     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-    drawRoundedRect(rightArrowBtn.x, rightArrowBtn.y, rightArrowBtn.w, rightArrowBtn.h, 8);
+    drawRoundedRect(rightArrowBtn.x, rightArrowBtn.y, rightArrowBtn.w, rightArrowBtn.h, 6);
     ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#ffffff';
-    ctx.fillText("▶", rightArrowBtn.x + 25, rightArrowBtn.y + 27);
+    ctx.fillText("▶", rightArrowBtn.x + rightArrowBtn.w / 2, rightArrowBtn.y + 24);
 
-    drawBanana(canvas.width / 2, 330, skin);
+    drawBanana(canvas.width / 2, canvas.height * 0.52, skin, isMobile ? 0.8 : 0.95);
 
-    ctx.font = '16px Arial';
+    ctx.font = isMobile ? '12px Arial' : '14px Arial';
     ctx.fillStyle = '#aaaa88';
-    ctx.fillText("Kasuta noole-nuppe või klaviatuuri skini muutmiseks", canvas.width / 2, 490);
-    ctx.fillText(isMobile ? "Puuduta ekraani alustamiseks" : "Vajuta [ENTER] või tee HIIRKLÕPS alustamiseks", canvas.width / 2, 520);
+    ctx.fillText("Muuda skini nooltega", canvas.width / 2, canvas.height - 50);
+    ctx.fillText(isMobile ? "Puuduta ekraani alustamiseks" : "Vajuta [ENTER] või klõpsa alustamiseks", canvas.width / 2, canvas.height - 25);
 }
 
 function renderGame() {
@@ -619,18 +620,21 @@ function renderGame() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const boardStyle = getBoardColor(level);
-    const boardX = 120, boardY = 90, boardW = 560, boardH = 420;
+    const marginX = isMobile ? 20 : 60;
+    const marginY = isMobile ? 70 : 60;
+    const boardW = canvas.width - (marginX * 2);
+    const boardH = canvas.height - marginY - 60;
     
     ctx.fillStyle = boardStyle.wood;
     ctx.strokeStyle = boardStyle.border;
-    ctx.lineWidth = 10;
+    ctx.lineWidth = 8;
     
-    drawRoundedRect(boardX, boardY, boardW, boardH, 24);
+    drawRoundedRect(marginX, marginY, boardW, boardH, 18);
     ctx.fill();
     ctx.stroke();
 
     const currentSkin = BANANA_SKINS[selectedSkinIndex];
-    drawBanana(canvas.width / 2, canvas.height / 2, currentSkin);
+    drawBanana(canvas.width / 2, marginY + boardH / 2, currentSkin, isMobile ? 0.8 : 0.9);
 
     ctx.fillStyle = '#b30000';
     for (let i = juiceDrips.length - 1; i >= 0; i--) {
@@ -655,64 +659,56 @@ function renderGame() {
 
     drawKnifeObj(knife);
 
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(0, 0, canvas.width, 60);
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(0, 0, canvas.width, 48);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 20px Arial';
+    ctx.font = 'bold 13px Arial';
     ctx.textAlign = 'left';
-    ctx.fillText(`Tase: ${level}`, 20, 38);
+    ctx.fillText(`Tase: ${level}`, 10, 28);
 
     ctx.fillStyle = cutsCount >= TARGET_CUTS ? '#2ecc71' : '#ffcc00';
-    ctx.fillText(`Kriimustusi: ${cutsCount} / ${TARGET_CUTS}`, 200, 38);
+    ctx.fillText(`Lõiked: ${cutsCount}/${TARGET_CUTS}`, isMobile ? 80 : 120, 28);
 
     ctx.fillStyle = timeLeft <= 10 ? '#e74c3c' : '#ffffff';
-    ctx.fillText(`Aeg: ${timeLeft}s`, 430, 38);
+    ctx.fillText(`Aeg: ${timeLeft}s`, isMobile ? 180 : 250, 28);
 
     if (!knife.isHeld) {
         ctx.fillStyle = '#ffffff';
-        ctx.font = '16px Arial';
+        ctx.font = '12px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(isMobile ? "Puuduta ekraani noa võtmiseks!" : "Võta nuga kätte (klõpsa noale)!", canvas.width / 2, 560);
-    } else {
-        ctx.fillStyle = '#aaaaaa';
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'center';
-        const helpText = isMobile ? "Lohista noaga lõikamiseks | Pane nuga ära nupust" : "1 tõmme = 1 kriimustus | Paremklõps paneb noa ära";
-        ctx.fillText(helpText, canvas.width / 2, 560);
+        ctx.fillText(isMobile ? "Puuduta ekraani noa võtmiseks!" : "Võta nuga kätte!", canvas.width / 2, canvas.height - 18);
     }
 }
 
 function renderPaused() {
-    renderGame(); // Draw game in background
+    renderGame();
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.fillStyle = '#ffe135';
-    ctx.font = 'bold 44px Arial';
+    ctx.font = 'bold 32px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText("PAUS", canvas.width / 2, 190);
+    ctx.fillText("PAUS", canvas.width / 2, canvas.height / 2 - 60);
 
     ctx.lineWidth = 2;
 
-    // Resume button
-    ctx.fillStyle = 'rgba(46, 204, 113, 0.8)';
+    ctx.fillStyle = 'rgba(46, 204, 113, 0.85)';
     ctx.strokeStyle = '#27ae60';
-    drawRoundedRect(resumeBtn.x, resumeBtn.y, resumeBtn.w, resumeBtn.h, 10);
+    drawRoundedRect(resumeBtn.x, resumeBtn.y, resumeBtn.w, resumeBtn.h, 8);
     ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 20px Arial';
-    ctx.fillText("Jätka mängu", canvas.width / 2, resumeBtn.y + 32);
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText("Jätka mängu", canvas.width / 2, resumeBtn.y + 27);
 
-    // Main Menu button
-    ctx.fillStyle = 'rgba(231, 76, 60, 0.8)';
+    ctx.fillStyle = 'rgba(231, 76, 60, 0.85)';
     ctx.strokeStyle = '#c0392b';
-    drawRoundedRect(pauseToMenuBtn.x, pauseToMenuBtn.y, pauseToMenuBtn.w, pauseToMenuBtn.h, 10);
+    drawRoundedRect(pauseToMenuBtn.x, pauseToMenuBtn.y, pauseToMenuBtn.w, pauseToMenuBtn.h, 8);
     ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 20px Arial';
-    ctx.fillText("Tagasi menüüsse", canvas.width / 2, pauseToMenuBtn.y + 32);
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText("Tagasi menüüsse", canvas.width / 2, pauseToMenuBtn.y + 27);
 }
 
 function renderGameOver() {
@@ -720,18 +716,18 @@ function renderGameOver() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.fillStyle = '#e74c3c';
-    ctx.font = 'bold 48px Arial';
+    ctx.font = isMobile ? 'bold 28px Arial' : 'bold 36px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText("AEG SAAMAS OTSA!", canvas.width / 2, 220);
+    ctx.fillText("AEG OTSAS!", canvas.width / 2, canvas.height * 0.35);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '22px Arial';
-    ctx.fillText(`Jõudsid tasemele: ${level}`, canvas.width / 2, 290);
-    ctx.fillText(`Skoor selles voorus: ${cutsCount} kriimustust`, canvas.width / 2, 330);
+    ctx.font = '16px Arial';
+    ctx.fillText(`Tase: ${level}`, canvas.width / 2, canvas.height * 0.48);
+    ctx.fillText(`Kriimustusi: ${cutsCount}`, canvas.width / 2, canvas.height * 0.55);
 
     ctx.fillStyle = '#3498db';
-    ctx.font = '18px Arial';
-    ctx.fillText(isMobile ? "Puuduta ekraani, et minna tagasi peamenüüsse" : "Tee klõps, et minna tagasi peamenüüsse", canvas.width / 2, 440);
+    ctx.font = '14px Arial';
+    ctx.fillText("Puuduta ekraani / tee klõps tagasiminekuks", canvas.width / 2, canvas.height * 0.72);
 }
 
 function gameLoop() {
@@ -747,6 +743,7 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
+fitCanvas();
 updateUIElements();
 gameLoop();
 </script>
