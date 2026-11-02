@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Banaani Simulaator</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #121218;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: none;
+        }
+        #gameContainer {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+        }
+        canvas {
+            display: block;
+            background-color: #1e1e28;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.8);
+            border-radius: 12px;
+            touch-action: none;
+        }
+        /* Mobile Overlay Controls */
+        .ui-btn {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.6);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 10;
+            backdrop-filter: blur(4px);
+        }
+        .ui-btn:active {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        #fullscreenBtn {
+            top: 10px;
+            right: 10px;
+        }
+        #putAwayBtn {
+            bottom: 10px;
+            right: 10px;
+            display: none;
+            background: rgba(231, 76, 60, 0.7);
+        }
+        #menuControls {
+            position: absolute;
+            bottom: 20px;
+            display: none;
+            gap: 15px;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <button id="fullscreenBtn" class="ui-btn"> Täisekraan</button>
+    <button id="putAwayBtn" class="ui-btn">Pane nuga ära</button>
+    
+    <div id="menuControls">
+        <button id="prevSkinBtn" class="ui-btn">Eelmine skin</button>
+        <button id="nextSkinBtn" class="ui-btn">Järgmine skin</button>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+const putAwayBtn = document.getElementById('putAwayBtn');
+const menuControls = document.getElementById('menuControls');
+const prevSkinBtn = document.getElementById('prevSkinBtn');
+const nextSkinBtn = document.getElementById('nextSkinBtn');
+
+// Dynamic Device Detection
+const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || /Mobi|Android/i.test(navigator.userAgent);
+
+let gameState = "MENU"; // "MENU", "GAME", "GAME_OVER"
+
+// Skins
+const BANANA_SKINS = [
+    { name: "Kollane (Klassikaline)", color: "#ffe135", type: "classic" },
+    { name: "Roheline (Toores)", color: "#7ccd32", type: "classic" },
+    { name: "Anatoomiline Käe-Banaan 🖐️", color: "#f1c27d", type: "hand" },
+    { name: "Pruun (Üleküpsenud)", color: "#6e3c14", type: "classic" },
+    { name: "Roosa (Rave)", color: "#ff69b4", type: "classic" }
+];
+let selectedSkinIndex = 0;
+
+// Game Parameters
+let level = 1;
+let cutsCount = 0;
+const TARGET_CUTS = 50;
+let timeLeft = 60;
+let timerInterval = null;
+
+const BOARD_COLORS = [
+    { wood: '#a0522d', border: '#654321', name: 'Klassikaline Puit' },
+    { wood: '#2e4053', border: '#1b2631', name: 'Tumesinine Marmor' },
+    { wood: '#1e8449', border: '#145a32', name: 'Smaragdroheline' },
+    { wood: '#7d6608', border: '#4d3e05', name: 'Kuldne Puit' },
+    { wood: '#6c3483', border: '#4a235a', name: 'Müstiline Violetne' },
+    { wood: '#ba4a00', border: '#7e2e00', name: 'Marmorpruun' }
+];
+
+let cuts = [];
+let currentCut = null;
+let juiceDrips = [];
+let isCutting = false;
+
+let knife = {
+    x: 680,
+    y: 420,
+    width: 90,
+    height: 35,
+    isHeld: false
+};
+
+let mousePos = { x: 0, y: 0 };
+let scale = 1;
+
+// Resizing logic for resolution and scaling
+function resizeCanvas() {
+    const containerWidth = window.innerWidth;
+    const containerHeight = window.innerHeight;
+    const baseWidth = 800;
+    const baseHeight = 600;
+
+    scale = Math.min(containerWidth / baseWidth, containerHeight / baseHeight);
+
+    canvas.style.width = `${baseWidth * scale}px`;
+    canvas.style.height = `${baseHeight * scale}px`;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function getCanvasCoordinates(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
+    return {
+        x: (clientX - rect.left) / scale,
+        y: (clientY - rect.top) / scale
+    };
+}
+
+function updateMousePos(coords) {
+    mousePos.x = coords.x;
+    mousePos.y = coords.y;
+
+    if (knife.isHeld) {
+        knife.x = mousePos.x - 20;
+        knife.y = mousePos.y - 10;
+
+        if (isCutting && currentCut) {
+            const lastPt = currentCut.points[currentCut.points.length - 1];
+            const dist = Math.hypot(mousePos.x - lastPt.x, mousePos.y - lastPt.y);
+            
+            if (dist > 5) {
+                currentCut.points.push({ x: mousePos.x, y: mousePos.y });
+
+                for (let i = 0; i < 2; i++) {
+                    juiceDrips.push({
+                        x: mousePos.x + (Math.random() * 10 - 5),
+                        y: mousePos.y + (Math.random() * 10 - 5),
+                        radius: Math.random() * 4 + 2,
+                        speedY: Math.random() * 1.5 + 0.5
+                    });
+                }
+            }
+        }
+    }
+}
+
+function handleInputStart(coords) {
+    if (gameState === "MENU") {
+        startGame();
+    } else if (gameState === "GAME") {
+        if (!knife.isHeld) {
+            // Auto-equip on mobile tap or tap directly on knife on desktop
+            if (isMobile || (mousePos.x >= knife.x - 40 && mousePos.x <= knife.x + knife.width + 20 &&
+                mousePos.y >= knife.y - 40 && mousePos.y <= knife.y + knife.height + 20)) {
+                knife.isHeld = true;
+            }
+        } else {
+            isCutting = true;
+            currentCut = { points: [{ x: coords.x, y: coords.y }] };
+        }
+    } else if (gameState === "GAME_OVER") {
+        gameState = "MENU";
+        updateUIElements();
+    }
+}
+
+function handleInputEnd() {
+    if (isCutting) {
+        if (currentCut && currentCut.points.length > 1) {
+            cuts.push(currentCut);
+            cutsCount++;
+
+            if (cutsCount >= TARGET_CUTS) {
+                nextLevel();
+            }
+        }
+        isCutting = false;
+        currentCut = null;
+    }
+}
+
+function resetKnife() {
+    knife.isHeld = false;
+    isCutting = false;
+    currentCut = null;
+    knife.x = 680;
+    knife.y = 420;
+    updateUIElements();
+}
+
+// Mouse Listeners
+canvas.addEventListener('mousemove', (e) => {
+    updateMousePos(getCanvasCoordinates(e));
+});
+
+canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 0) {
+        const coords = getCanvasCoordinates(e);
+        updateMousePos(coords);
+        handleInputStart(coords);
+        updateUIElements();
+    }
+});
+
+window.addEventListener('mouseup', (e) => {
+    if (e.button === 0) {
+        handleInputEnd();
+    }
+});
+
+canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (knife.isHeld) {
+        resetKnife();
+    }
+});
+
+// Touch Listeners
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const coords = getCanvasCoordinates(e);
+    updateMousePos(coords);
+    handleInputStart(coords);
+    updateUIElements();
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    updateMousePos(getCanvasCoordinates(e));
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    handleInputEnd();
+}, { passive: false });
+
+// Mobile Button Controls
+fullscreenBtn.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+        document.exitFullscreen().catch(() => {});
+    }
+});
+
+putAwayBtn.addEventListener('click', () => {
+    resetKnife();
+});
+
+prevSkinBtn.addEventListener('click', () => {
+    selectedSkinIndex = (selectedSkinIndex - 1 + BANANA_SKINS.length) % BANANA_SKINS.length;
+});
+
+nextSkinBtn.addEventListener('click', () => {
+    selectedSkinIndex = (selectedSkinIndex + 1) % BANANA_SKINS.length;
+});
+
+function updateUIElements() {
+    if (gameState === "MENU") {
+        menuControls.style.display = isMobile ? "flex" : "none";
+        putAwayBtn.style.display = "none";
+    } else if (gameState === "GAME") {
+        menuControls.style.display = "none";
+        putAwayBtn.style.display = (knife.isHeld && isMobile) ? "block" : "none";
+    } else {
+        menuControls.style.display = "none";
+        putAwayBtn.style.display = "none";
+    }
+}
+
+window.addEventListener('keydown', (e) => {
+    if (gameState === "MENU") {
+        if (e.key === "ArrowRight") {
+            selectedSkinIndex = (selectedSkinIndex + 1) % BANANA_SKINS.length;
+        } else if (e.key === "ArrowLeft") {
+            selectedSkinIndex = (selectedSkinIndex - 1 + BANANA_SKINS.length) % BANANA_SKINS.length;
+        } else if (e.key === "Enter" || e.key === " ") {
+            startGame();
+        }
+    } else if (gameState === "GAME") {
+        if (e.key === "Escape") {
+            stopTimer();
+            gameState = "MENU";
+            updateUIElements();
+        } else if (e.key === "c" || e.key === "C") {
+            cuts = [];
+            juiceDrips = [];
+            cutsCount = 0;
+        }
+    }
+});
+
+function drawRoundedRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+function startGame() {
+    level = 1;
+    resetLevelData();
+    gameState = "GAME";
+    updateUIElements();
+    startTimer();
+}
+
+function resetLevelData() {
+    cutsCount = 0;
+    cuts = [];
+    currentCut = null;
+    juiceDrips = [];
+    timeLeft = Math.max(20, 60 - (level - 1) * 5);
+    knife.isHeld = false;
+    knife.x = 680;
+    knife.y = 420;
+    isCutting = false;
+}
+
+function startTimer() {
+    stopTimer();
+    timerInterval = setInterval(() => {
+        if (gameState === "GAME") {
+            timeLeft--;
+            if (timeLeft <= 0) {
+                stopTimer();
+                gameState = "GAME_OVER";
+                updateUIElements();
+            }
+        }
+    }, 1000);
+}
+
+function stopTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+}
+
+function nextLevel() {
+    level++;
+    resetLevelData();
+}
+
+function getBoardColor(lvl) {
+    const idx = (lvl - 1) % BOARD_COLORS.length;
+    return BOARD_COLORS[idx];
+}
+
+function drawBanana(cx, cy, skin) {
+    ctx.save();
+
+    if (skin.type === "hand") {
+        ctx.fillStyle = skin.color;
+        ctx.strokeStyle = "#b5834a";
+        ctx.lineWidth = 4;
+        ctx.lineJoin = "round";
+
+        ctx.beginPath();
+        ctx.moveTo(cx - 140, cy + 60);
+        ctx.bezierCurveTo(cx - 60, cy + 90, cx + 20, cy + 60, cx + 80, cy + 20);
+
+        ctx.lineTo(cx + 105, cy + 30);
+        ctx.lineTo(cx + 120, cy + 15);
+        ctx.lineTo(cx + 110, cy + 0);
+
+        ctx.lineTo(cx + 130, cy - 10);
+        ctx.lineTo(cx + 120, cy - 25);
+
+        ctx.lineTo(cx + 135, cy - 40);
+        ctx.lineTo(cx + 120, cy - 50);
+
+        ctx.lineTo(cx + 110, cy - 55);
+        ctx.lineTo(cx + 95, cy - 40);
+
+        ctx.lineTo(cx + 75, cy - 45);
+        ctx.lineTo(cx + 60, cy - 25);
+
+        ctx.bezierCurveTo(cx + 10, cy - 10, cx - 50, cy + 10, cx - 120, cy + 10);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = "rgba(180, 100, 50, 0.25)";
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(cx - 110, cy + 35);
+        ctx.bezierCurveTo(cx - 40, cy + 45, cx + 30, cy + 25, cx + 70, cy - 5);
+        ctx.stroke();
+
+    } else {
+        ctx.beginPath();
+        ctx.arc(cx, cy - 20, 115, 0.2 * Math.PI, 0.8 * Math.PI, false);
+        ctx.lineWidth = 48;
+        ctx.strokeStyle = skin.color;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy - 20, 115, 0.22 * Math.PI, 0.78 * Math.PI, false);
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+        ctx.stroke();
+
+        ctx.fillStyle = '#4a2e13';
+        ctx.beginPath();
+        ctx.arc(cx - 100, cy + 50, 9, 0, Math.PI * 2);
+        ctx.arc(cx + 100, cy + 50, 9, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.restore();
+}
+
+function drawKnifeObj(k) {
+    ctx.save();
+    
+    ctx.fillStyle = '#e0e0e0';
+    ctx.strokeStyle = '#555555';
+    ctx.lineWidth = 2;
+    
+    ctx.beginPath();
+    ctx.moveTo(k.x, k.y);
+    ctx.lineTo(k.x + 60, k.y - 18);
+    ctx.lineTo(k.x + 50, k.y + 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(k.x + 5, k.y - 2);
+    ctx.lineTo(k.x + 55, k.y - 16);
+    ctx.lineTo(k.x + 45, k.y + 5);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#2c3e50';
+    ctx.fillRect(k.x - 30, k.y - 8, 32, 14);
+
+    ctx.fillStyle = '#f39c12';
+    ctx.beginPath();
+    ctx.arc(k.x - 20, k.y, 2, 0, Math.PI * 2);
+    ctx.arc(k.x - 8, k.y, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function renderStroke(cutObj) {
+    if (!cutObj || cutObj.points.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(cutObj.points[0].x, cutObj.points[0].y);
+    for (let i = 1; i < cutObj.points.length; i++) {
+        ctx.lineTo(cutObj.points[i].x, cutObj.points[i].y);
+    }
+    ctx.stroke();
+}
+
+function renderMenu() {
+    ctx.fillStyle = '#121218';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#ffe135';
+    ctx.font = 'bold 46px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText("BANAANI SIMULAATOR", canvas.width / 2, 90);
+
+    const skin = BANANA_SKINS[selectedSkinIndex];
+    ctx.font = '22px Arial';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(`< Skinn: ${skin.name} >`, canvas.width / 2, 180);
+
+    drawBanana(canvas.width / 2, 330, skin);
+
+    ctx.font = '16px Arial';
+    ctx.fillStyle = '#aaaa88';
+    if (isMobile) {
+        ctx.fillText("Kasuta nuppe skini muutmiseks", canvas.width / 2, 490);
+        ctx.fillText("Puuduta ekraani alustamiseks", canvas.width / 2, 520);
+    } else {
+        ctx.fillText("Kasuta nooli [<- / ->] skini muutmiseks", canvas.width / 2, 490);
+        ctx.fillText("Vajuta [ENTER] või tee HIIRKLÕPS alustamiseks", canvas.width / 2, 520);
+    }
+}
+
+function renderGame() {
+    ctx.fillStyle = '#2c3e50';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const boardStyle = getBoardColor(level);
+    const boardX = 120, boardY = 90, boardW = 560, boardH = 420;
+    
+    ctx.fillStyle = boardStyle.wood;
+    ctx.strokeStyle = boardStyle.border;
+    ctx.lineWidth = 10;
+    
+    drawRoundedRect(boardX, boardY, boardW, boardH, 24);
+    ctx.fill();
+    ctx.stroke();
+
+    const currentSkin = BANANA_SKINS[selectedSkinIndex];
+    drawBanana(canvas.width / 2, canvas.height / 2, currentSkin);
+
+    ctx.fillStyle = '#b30000';
+    for (let i = juiceDrips.length - 1; i >= 0; i--) {
+        let drip = juiceDrips[i];
+        ctx.beginPath();
+        ctx.arc(drip.x, drip.y, drip.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        drip.y += drip.speedY;
+        drip.radius = Math.max(0.5, drip.radius - 0.01);
+    }
+
+    ctx.strokeStyle = '#660000';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    cuts.forEach(c => renderStroke(c));
+
+    if (isCutting && currentCut) {
+        renderStroke(currentCut);
+    }
+
+    drawKnifeObj(knife);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, canvas.width, 60);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Tase: ${level} (${boardStyle.name})`, 20, 38);
+
+    ctx.fillStyle = cutsCount >= TARGET_CUTS ? '#2ecc71' : '#ffcc00';
+    ctx.fillText(`Kriimustusi: ${cutsCount} / ${TARGET_CUTS}`, 300, 38);
+
+    ctx.fillStyle = timeLeft <= 10 ? '#e74c3c' : '#ffffff';
+    ctx.fillText(`Aeg: ${timeLeft}s`, 660, 38);
+
+    if (!knife.isHeld) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(isMobile ? "Puuduta ekraani noa võtmiseks!" : "Võta nuga kätte (klõpsa noale)!", canvas.width / 2, 560);
+    } else {
+        ctx.fillStyle = '#aaaaaa';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        const helpText = isMobile ? "Lohista noaga lõikamiseks | Pane nuga ära nupust" : "1 tõmme = 1 kriimustus | Paremklõps paneb noa ära";
+        ctx.fillText(helpText, canvas.width / 2, 560);
+    }
+}
+
+function renderGameOver() {
+    ctx.fillStyle = 'rgba(15, 15, 20, 0.9)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#e74c3c';
+    ctx.font = 'bold 48px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText("AEG SAAMAS OTSA!", canvas.width / 2, 220);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '22px Arial';
+    ctx.fillText(`Jõudsid tasemele: ${level}`, canvas.width / 2, 290);
+    ctx.fillText(`Skoor selles voorus: ${cutsCount} kriimustust`, canvas.width / 2, 330);
+
+    ctx.fillStyle = '#3498db';
+    ctx.font = '18px Arial';
+    ctx.fillText(isMobile ? "Puuduta ekraani, et minna tagasi peamenüüsse" : "Tee klõps, et minna tagasi peamenüüsse", canvas.width / 2, 440);
+}
+
+function gameLoop() {
+    if (gameState === "MENU") {
+        renderMenu();
+    } else if (gameState === "GAME") {
+        renderGame();
+    } else if (gameState === "GAME_OVER") {
+        renderGameOver();
+    }
+    requestAnimationFrame(gameLoop);
+}
+
+updateUIElements();
+gameLoop();
+</script>
+
+</body>
+</html>
