@@ -105,7 +105,24 @@ const putAwayBtn = document.getElementById('putAwayBtn');
 
 const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || /Mobi|Android/i.test(navigator.userAgent);
 
-let gameState = "MENU"; 
+let gameState = "MENU"; // "MENU", "GAME", "PAUSED", "GAME_OVER"
+
+const MAX_LEVELS = 10;
+
+// LocalStorage Persistence
+let highScore = {
+    maxLevel: parseInt(localStorage.getItem('banaani_high_level')) || 1,
+    totalCuts: parseInt(localStorage.getItem('banaani_total_cuts')) || 0
+};
+
+function saveStats(runLevel, runCuts) {
+    if (runLevel > highScore.maxLevel) {
+        highScore.maxLevel = runLevel;
+        localStorage.setItem('banaani_high_level', highScore.maxLevel);
+    }
+    highScore.totalCuts += runCuts;
+    localStorage.setItem('banaani_total_cuts', highScore.totalCuts);
+}
 
 const BANANA_SKINS = [
     { name: "Kollane (Klassikaline)", color: "#ffe135", type: "classic" },
@@ -123,9 +140,11 @@ let pauseToMenuBtn = { x: 0, y: 0, w: 200, h: 48 };
 
 let level = 1;
 let cutsCount = 0;
-const TARGET_CUTS = 50;
+let totalRunCuts = 0; 
+let targetCuts = 50; // Dynamic target cuts per level
 let timeLeft = 60;
 let timerInterval = null;
+let isVictory = false;
 
 const BOARD_COLORS = [
     { wood: '#a0522d', border: '#654321', name: 'Klassikaline Puit' },
@@ -133,7 +152,11 @@ const BOARD_COLORS = [
     { wood: '#1e8449', border: '#145a32', name: 'Smaragdroheline' },
     { wood: '#7d6608', border: '#4d3e05', name: 'Kuldne Puit' },
     { wood: '#6c3483', border: '#4a235a', name: 'Müstiline Violetne' },
-    { wood: '#ba4a00', border: '#7e2e00', name: 'Marmorpruun' }
+    { wood: '#ba4a00', border: '#7e2e00', name: 'Marmorpruun' },
+    { wood: '#117a65', border: '#0e6251', name: 'Türkiissinine Marmor' },
+    { wood: '#7b7d7d', border: '#4d5656', name: 'Kiviplaat' },
+    { wood: '#9a7d0a', border: '#7d6608', name: 'Pronks' },
+    { wood: '#b03a2e', border: '#78281f', name: 'Rubiin' }
 ];
 
 let cuts = [];
@@ -151,6 +174,10 @@ let knife = {
 
 let mousePos = { x: 0, y: 0 };
 let scale = 1;
+
+function getTargetCutsForLevel(lvl) {
+    return 50 + (lvl - 1) * 25; // Base 50 + 25 per level
+}
 
 function setupResolution() {
     if (isMobile) {
@@ -262,9 +289,14 @@ function handleInputEnd() {
         if (currentCut && currentCut.points.length > 1) {
             cuts.push(currentCut);
             cutsCount++;
+            totalRunCuts++;
 
-            if (cutsCount >= TARGET_CUTS) {
-                nextLevel();
+            if (cutsCount >= targetCuts) {
+                if (level >= MAX_LEVELS) {
+                    winGame();
+                } else {
+                    nextLevel();
+                }
             }
         }
         isCutting = false;
@@ -419,7 +451,7 @@ function drawRoundedRect(x, y, w, h, r) {
     ctx.quadraticCurveTo(x + w, y, x + w, y + r);
     ctx.lineTo(x + w, y + h - r);
     ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y);
+    ctx.lineTo(x + r, y + h);
     ctx.quadraticCurveTo(x, y + h, x, y + h - r);
     ctx.lineTo(x, y + r);
     ctx.quadraticCurveTo(x, y, x + r, y);
@@ -428,6 +460,8 @@ function drawRoundedRect(x, y, w, h, r) {
 
 function startGame() {
     level = 1;
+    totalRunCuts = 0;
+    isVictory = false;
     resetLevelData();
     gameState = "GAME";
     updateUIElements();
@@ -439,7 +473,8 @@ function resetLevelData() {
     cuts = [];
     currentCut = null;
     juiceDrips = [];
-    timeLeft = Math.max(20, 60 - (level - 1) * 5);
+    targetCuts = getTargetCutsForLevel(level);
+    timeLeft = 25 + level * 35; // Generous timer based on cut count
     knife.isHeld = false;
     knife.x = canvas.width - 120;
     knife.y = canvas.height - 180;
@@ -453,6 +488,8 @@ function startTimer() {
             timeLeft--;
             if (timeLeft <= 0) {
                 stopTimer();
+                isVictory = false;
+                saveStats(level, totalRunCuts);
                 gameState = "GAME_OVER";
                 updateUIElements();
             }
@@ -467,6 +504,14 @@ function stopTimer() {
 function nextLevel() {
     level++;
     resetLevelData();
+}
+
+function winGame() {
+    stopTimer();
+    isVictory = true;
+    saveStats(MAX_LEVELS, totalRunCuts);
+    gameState = "GAME_OVER";
+    updateUIElements();
 }
 
 function getBoardColor(lvl) {
@@ -591,31 +636,28 @@ function renderMenu() {
     ctx.fillStyle = '#ffe135';
     ctx.font = isMobile ? 'bold 28px Arial' : 'bold 44px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText("BANAANI SIMULAATOR", canvas.width / 2, 90);
+    ctx.fillText("BANAANI SIMULAATOR", canvas.width / 2, 80);
 
     const skin = BANANA_SKINS[selectedSkinIndex];
     const skinText = `Skinn: ${skin.name}`;
     ctx.font = isMobile ? '16px Arial' : '20px Arial';
     
-    // Dynamic Arrow Positioning based on exact text width
     const textWidth = ctx.measureText(skinText).width;
     const padding = 20;
     
     leftArrowBtn.w = 44;
     leftArrowBtn.h = 36;
-    leftArrowBtn.y = 155;
+    leftArrowBtn.y = 135;
     leftArrowBtn.x = (canvas.width / 2) - (textWidth / 2) - leftArrowBtn.w - padding;
 
     rightArrowBtn.w = 44;
     rightArrowBtn.h = 36;
-    rightArrowBtn.y = 155;
+    rightArrowBtn.y = 135;
     rightArrowBtn.x = (canvas.width / 2) + (textWidth / 2) + padding;
 
-    // Draw skin text label
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(skinText, canvas.width / 2, 180);
+    ctx.fillText(skinText, canvas.width / 2, 160);
 
-    // Render Left Arrow Box
     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
@@ -627,7 +669,6 @@ function renderMenu() {
     ctx.font = 'bold 18px Arial';
     ctx.fillText("◀", leftArrowBtn.x + (leftArrowBtn.w / 2), leftArrowBtn.y + 24);
 
-    // Render Right Arrow Box
     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
     drawRoundedRect(rightArrowBtn.x, rightArrowBtn.y, rightArrowBtn.w, rightArrowBtn.h, 6);
     ctx.fill(); 
@@ -636,12 +677,17 @@ function renderMenu() {
     ctx.fillStyle = '#ffffff';
     ctx.fillText("▶", rightArrowBtn.x + (rightArrowBtn.w / 2), rightArrowBtn.y + 24);
 
-    drawBanana(canvas.width / 2, 330, skin);
+    drawBanana(canvas.width / 2, 310, skin);
 
-    ctx.font = isMobile ? '13px Arial' : '16px Arial';
+    // Record Display
+    ctx.fillStyle = '#2ecc71';
+    ctx.font = isMobile ? '14px Arial' : '16px Arial';
+    ctx.fillText(`🏆 Rekord Tase: ${highScore.maxLevel} / ${MAX_LEVELS} | Kokku lõikeid: ${highScore.totalCuts}`, canvas.width / 2, canvas.height - 130);
+
+    ctx.font = isMobile ? '13px Arial' : '15px Arial';
     ctx.fillStyle = '#aaaa88';
-    ctx.fillText("Muuda skini nooltega", canvas.width / 2, canvas.height - 110);
-    ctx.fillText(isMobile ? "Puuduta ekraani alustamiseks" : "Vajuta [ENTER] või tee HIIRKLÕPS alustamiseks", canvas.width / 2, canvas.height - 80);
+    ctx.fillText("Muuda skini nooltega", canvas.width / 2, canvas.height - 90);
+    ctx.fillText(isMobile ? "Puuduta ekraani alustamiseks" : "Vajuta [ENTER] või tee HIIRKLÕPS alustamiseks", canvas.width / 2, canvas.height - 60);
 }
 
 function renderGame() {
@@ -696,17 +742,17 @@ function renderGame() {
     ctx.textAlign = 'left';
 
     if (isMobile) {
-        ctx.fillText(`Tase: ${level}`, 10, 36);
-        ctx.fillStyle = cutsCount >= TARGET_CUTS ? '#2ecc71' : '#ffcc00';
-        ctx.fillText(`Lõiked: ${cutsCount}/${TARGET_CUTS}`, 80, 36);
+        ctx.fillText(`Tase: ${level}/${MAX_LEVELS}`, 10, 36);
+        ctx.fillStyle = cutsCount >= targetCuts ? '#2ecc71' : '#ffcc00';
+        ctx.fillText(`Lõiked: ${cutsCount}/${targetCuts}`, 105, 36);
         ctx.fillStyle = timeLeft <= 10 ? '#e74c3c' : '#ffffff';
-        ctx.fillText(`Aeg: ${timeLeft}s`, 175, 36);
+        ctx.fillText(`Aeg: ${timeLeft}s`, 220, 36);
     } else {
-        ctx.fillText(`Tase: ${level}`, 20, 38);
-        ctx.fillStyle = cutsCount >= TARGET_CUTS ? '#2ecc71' : '#ffcc00';
-        ctx.fillText(`Kriimustusi: ${cutsCount} / ${TARGET_CUTS}`, 180, 38);
+        ctx.fillText(`Tase: ${level} / ${MAX_LEVELS}`, 20, 38);
+        ctx.fillStyle = cutsCount >= targetCuts ? '#2ecc71' : '#ffcc00';
+        ctx.fillText(`Kriimustusi: ${cutsCount} / ${targetCuts}`, 190, 38);
         ctx.fillStyle = timeLeft <= 10 ? '#e74c3c' : '#ffffff';
-        ctx.fillText(`Aeg: ${timeLeft}s`, 420, 38);
+        ctx.fillText(`Aeg: ${timeLeft}s`, 450, 38);
     }
 
     if (!knife.isHeld) {
@@ -754,22 +800,54 @@ function renderPaused() {
 }
 
 function renderGameOver() {
-    ctx.fillStyle = 'rgba(15, 15, 20, 0.9)';
+    ctx.fillStyle = 'rgba(15, 15, 20, 0.93)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    ctx.fillStyle = '#e74c3c';
-    ctx.font = isMobile ? 'bold 36px Arial' : 'bold 48px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText("AEG OTSAS!", canvas.width / 2, 220);
+
+    if (isVictory) {
+        ctx.fillStyle = '#2ecc71';
+        ctx.font = isMobile ? 'bold 36px Arial' : 'bold 48px Arial';
+        ctx.fillText("PALJU ÕNNE! VÕIT! 🍌", canvas.width / 2, 140);
+    } else {
+        ctx.fillStyle = '#e74c3c';
+        ctx.font = isMobile ? 'bold 36px Arial' : 'bold 48px Arial';
+        ctx.fillText("AEG OTSAS!", canvas.width / 2, 140);
+    }
+
+    const boxW = isMobile ? 300 : 440;
+    const boxH = isMobile ? 280 : 260;
+    const boxX = canvas.width / 2 - boxW / 2;
+    const boxY = 180;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 2;
+    drawRoundedRect(boxX, boxY, boxW, boxH, 12);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffe135';
+    ctx.font = 'bold 22px Arial';
+    ctx.fillText("📊 MÄNGU STATISTIKA", canvas.width / 2, boxY + 40);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '22px Arial';
-    ctx.fillText(`Jõudsid tasemele: ${level}`, canvas.width / 2, 290);
-    ctx.fillText(`Skoor selles voorus: ${cutsCount} kriimustust`, canvas.width / 2, 330);
+    ctx.font = isMobile ? '15px Arial' : '18px Arial';
+    ctx.textAlign = 'left';
+    const leftX = boxX + 30;
 
+    ctx.fillText(`• Läbitud tasemed: ${isVictory ? MAX_LEVELS : level - 1} / ${MAX_LEVELS}`, leftX, boxY + 85);
+    ctx.fillText(`• Lõikeid selles voorus: ${totalRunCuts}`, leftX, boxY + 120);
+
+    const completedLevels = isVictory ? MAX_LEVELS : (level - 1);
+    const avgCuts = completedLevels > 0 ? (totalRunCuts / completedLevels).toFixed(1) : 0;
+    ctx.fillText(`• Keskmiselt lõikeid tasemel: ${avgCuts}`, leftX, boxY + 155);
+    ctx.fillText(`• Eluaegseid lõikeid kokku: ${highScore.totalCuts}`, leftX, boxY + 190);
+
+    ctx.textAlign = 'center';
     ctx.fillStyle = '#3498db';
     ctx.font = '16px Arial';
-    ctx.fillText(isMobile ? "Puuduta ekraani uuesti alustamiseks" : "Tee klõps peamenüüsse minemiseks", canvas.width / 2, 440);
+    ctx.fillText(isMobile ? "Puuduta ekraani menüüsse minemiseks" : "Tee klõps peamenüüsse minemiseks", canvas.width / 2, canvas.height - 60);
 }
 
 function gameLoop() {
